@@ -8,6 +8,14 @@ from typing import Any
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from qdrant_client import QdrantClient
 
+from models.query import (
+    QueryRequest,
+    QueryResponse,
+    RankedDocument,
+    RetrieverScores,
+)
+from retriever.base import BaseRetriever
+
 MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", 50 * 1024 * 1024))
 
 if location := os.environ.get("QDRANT_LOCATION"):
@@ -19,6 +27,9 @@ else:
     )
 
 app = FastAPI()
+
+
+retriever: BaseRetriever | None = None
 
 
 @app.post("/ingest")
@@ -56,3 +67,39 @@ def delete_collection(collection: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="Collection not found")
     qdrant.delete_collection(collection_name=collection)
     return {"status": "deleted"}
+
+
+@app.post("/query", response_model=QueryResponse)
+def query(req: QueryRequest) -> QueryResponse:
+    """Retrieve documents for ``req.query`` using the configured retriever.
+
+    The response includes per-retriever scores for each returned text chunk
+    alongside its fused rank.
+    """
+
+    if retriever is None:
+        raise HTTPException(status_code=500, detail="Retriever not configured")
+
+    sem = []
+    lex = []
+    if req.mode in {"semantic", "hybrid"}:
+        sem = retriever._semantic_search(req.query, req.top_k)
+    if req.mode in {"lexical", "hybrid"}:
+        lex = retriever._lexical_search(req.query, req.top_k)
+
+    if req.mode == "semantic":
+        fused_docs = [rd.doc for rd in sem]
+    elif req.mode == "lexical":
+        fused_docs = [rd.doc for rd in lex]
+    else:
+        fused_docs = retriever._fuse([sem, lex], req.top_k)
+
+    results: list[RankedDocument] = []
+    for rank, doc in enumerate(fused_docs, start=1):
+        text = doc.text
+        sem_score = next((d.score for d in sem if d.doc.text == text), None)
+        lex_score = next((d.score for d in lex if d.doc.text == text), None)
+        scores = RetrieverScores(semantic=sem_score, lexical=lex_score)
+        results.append(RankedDocument(text=text, rank=rank, scores=scores))
+
+    return QueryResponse(query=req.query, results=results)
