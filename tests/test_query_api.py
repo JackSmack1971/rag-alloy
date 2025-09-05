@@ -37,9 +37,12 @@ def test_query_returns_ranked_scores():
     main.retriever = BaseRetriever(store, corpus)
     client = TestClient(main.app)
 
-    res = client.post("/query", json={"query": "beta", "top_k": 2, "mode": "hybrid"})
+    res = client.post(
+        "/query", json={"query": "beta", "top_k": 2, "mode": "hybrid", "provider": "none"}
+    )
     assert res.status_code == 200
     body = res.json()
+    assert body["answer"] == ""
     assert len(body["results"]) == 2
     first = body["results"][0]
     assert first["rank"] == 1

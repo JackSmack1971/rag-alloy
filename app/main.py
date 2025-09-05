@@ -14,6 +14,7 @@ from models.query import (
     RankedDocument,
     RetrieverScores,
 )
+from reasoner.runner import Runner
 from retriever.base import BaseRetriever
 
 MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", 50 * 1024 * 1024))
@@ -102,4 +103,9 @@ def query(req: QueryRequest) -> QueryResponse:
         scores = RetrieverScores(semantic=sem_score, lexical=lex_score)
         results.append(RankedDocument(text=text, rank=rank, scores=scores))
 
-    return QueryResponse(query=req.query, results=results)
+    context = "\n\n".join(doc.text for doc in fused_docs)
+    prompt = f"Context:\n{context}\n\nQuestion: {req.query}\nAnswer:"
+    runner = Runner(req.provider)
+    answer = runner.generate(prompt)
+
+    return QueryResponse(query=req.query, answer=answer, results=results)
