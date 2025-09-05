@@ -11,11 +11,14 @@ from fastapi.testclient import TestClient
 
 def _reload_app():
     os.environ["QDRANT_LOCATION"] = ":memory:"
+    sys.version_info = (3, 11, 0)  # type: ignore[attr-defined]
     import app.main as main
     return importlib.reload(main)
 
 
-def test_healthz_and_metrics():
+def test_ac_ops_01_healthz_and_metrics():
+    """AC-OPS-01: /healthz returns OK and /metrics exposes counters."""
+
     main = _reload_app()
     client = TestClient(main.app)
 

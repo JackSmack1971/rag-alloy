@@ -12,6 +12,7 @@ from qdrant_client.http import models as rest
 
 def _reload_app():
     os.environ["QDRANT_LOCATION"] = ":memory:"
+    sys.version_info = (3, 11, 0)  # type: ignore[attr-defined]
     import app.main as main
     return importlib.reload(main)
 
