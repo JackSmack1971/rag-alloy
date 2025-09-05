@@ -7,6 +7,7 @@ FastAPI service with file ingestion capabilities.
 - `POST /ingest` – upload a file and receive a job identifier. Files larger than `MAX_UPLOAD_BYTES` (default 50MB) are rejected with HTTP 413.
 - `GET /collections/{collection}/stats` – retrieve vector and point counts for a collection.
 - `DELETE /collections/{collection}` – remove a collection and all associated vectors and metadata.
+- `POST /query` – retrieve text chunks for a query. The response includes per-retriever scores and a fused ranking.
 
 ## Configuration
 
