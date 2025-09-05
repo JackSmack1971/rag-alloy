@@ -12,3 +12,9 @@ The ingestion pipeline respects the following environment variables:
 
 - `CHUNK_SIZE` – max characters per chunk during ingestion (default 800).
 - `CHUNK_OVERLAP` – number of overlapping characters between chunks (default 120).
+
+## Index
+
+The `index` package contains an embedding store built on Qdrant. It computes
+sentence-transformer embeddings, stores DocArray metadata, and deduplicates
+content using a SHA-256 hash of each text chunk.
