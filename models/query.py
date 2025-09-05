@@ -13,6 +13,7 @@ class QueryRequest(BaseModel):
     query: str
     top_k: int = 5
     mode: Literal["semantic", "lexical", "hybrid"] = "hybrid"
+    provider: Literal["none", "transformers", "ollama"] = "none"
 
 
 class RetrieverScores(BaseModel):
@@ -34,4 +35,5 @@ class QueryResponse(BaseModel):
     """Response model for ``/query`` containing fused ranking information."""
 
     query: str
+    answer: str = ""
     results: List[RankedDocument] = Field(default_factory=list)
