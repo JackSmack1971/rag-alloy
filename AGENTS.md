@@ -36,6 +36,10 @@ APP_TOKEN
 change_me – bearer token for write endpoints
 MAX_UPLOAD_BYTES
 52_428_800 – max upload size in bytes for /ingest
+CHUNK_SIZE
+800 – max characters per chunk during ingestion
+CHUNK_OVERLAP
+120 – number of overlapping characters between chunks
 QDRANT_HOST/PORT
 localhost/6333 – vector store location
 RETRIEVAL_DEFAULT_MODE
