@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import os
+import sys
 from typing import Any
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from prometheus_fastapi_instrumentator import Instrumentator
 from qdrant_client import QdrantClient
+
+if sys.version_info[:2] != (3, 11):  # pragma: no cover - defensive startup check
+    raise SystemExit("Python 3.11 is required")
 
 from models.query import (
     QueryRequest,
