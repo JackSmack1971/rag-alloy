@@ -27,3 +27,9 @@ content using a SHA-256 hash of each text chunk.
 ## Graph
 
 The `graph` package provides spaCy-powered entity extraction (`graph/entities.py`) and optional graph expansion using NetworkX or Neo4j.
+
+## Evaluation
+
+The `eval/harness.py` module computes recall@10, mean reciprocal rank (MRR),
+and p95 retrieval latency. The script reports whether the measured values meet
+the PRD targets of recall≥0.85, MRR≥0.65, and latency≤900 ms.
