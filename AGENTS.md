@@ -34,6 +34,8 @@ APP_AUTH_MODE
 token – set to none to disable auth[16]
 APP_TOKEN
 change_me – bearer token for write endpoints
+MAX_UPLOAD_BYTES
+52_428_800 – max upload size in bytes for /ingest
 QDRANT_HOST/PORT
 localhost/6333 – vector store location
 RETRIEVAL_DEFAULT_MODE
