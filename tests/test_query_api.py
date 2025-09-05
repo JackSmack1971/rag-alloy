@@ -52,5 +52,11 @@ def test_query_returns_ranked_scores():
     first = body["results"][0]
     assert first["rank"] == 1
     assert set(first["scores"].keys()) == {"semantic", "lexical"}
-    assert "file_id" in first
-    assert body["citations"][0]["file_id"] == first["file_id"]
+    assert first["file_id"] in {"f1", "f2"}
+    assert first["page"] in {1, 2}
+    assert first["span"] == [0, 10]
+    citation = body["citations"][0]
+    assert citation["file_id"] == first["file_id"]
+    assert citation["page"] == first["page"]
+    assert citation["span"] == first["span"]
+    assert citation["text"] == first["text"]

@@ -40,6 +40,7 @@ class Citation(BaseModel):
     file_id: str
     page: int | None = None
     span: Tuple[int, int] | None = None
+    text: str | None = None
 
 
 class QueryResponse(BaseModel):
