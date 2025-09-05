@@ -26,9 +26,9 @@ class FakeStore:
 
 def test_hybrid_rrf_fuses_results():
     corpus = [
-        TextDoc(text="alpha beta", tags={"file_id": "f1"}),
-        TextDoc(text="beta gamma", tags={"file_id": "f2"}),
-        TextDoc(text="gamma delta", tags={"file_id": "f3"}),
+        TextDoc(text="alpha beta", tags={"file_id": "f1", "page": 1, "span": [0, 10]}),
+        TextDoc(text="beta gamma", tags={"file_id": "f2", "page": 2, "span": [0, 10]}),
+        TextDoc(text="gamma delta", tags={"file_id": "f3", "page": 3, "span": [0, 10]}),
     ]
     store = FakeStore(corpus)
     retriever = BaseRetriever(store, corpus)
@@ -38,6 +38,8 @@ def test_hybrid_rrf_fuses_results():
     assert texts[0] in {"alpha beta", "beta gamma"}
     assert len(docs) == 2
     assert graph_ctx is None
+    assert docs[0].tags.get("file_id")
+    assert "page" in docs[0].tags and "span" in docs[0].tags
 
 
 def test_graph_expansion_returns_neighbors():

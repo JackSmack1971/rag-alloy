@@ -34,11 +34,10 @@ def _load_model() -> Language:
         _nlp = spacy.load("en_core_web_sm")
     except Exception:
         _nlp = spacy.blank("en")
-        ruler = EntityRuler(_nlp)
+        ruler = _nlp.add_pipe("entity_ruler")
         ruler.add_patterns([
             {"label": "MISC", "pattern": [{"IS_TITLE": True}]},
         ])
-        _nlp.add_pipe(ruler)
     return _nlp
 
 

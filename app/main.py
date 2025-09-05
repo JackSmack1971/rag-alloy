@@ -117,7 +117,7 @@ def query(req: QueryRequest) -> QueryResponse:
                 scores=scores,
             )
         )
-        citations.append(Citation(file_id=file_id, page=page, span=span))
+        citations.append(Citation(file_id=file_id, page=page, span=span, text=text))
 
     context = "\n\n".join(doc.text for doc in fused_docs)
     prompt = f"Context:\n{context}\n\nQuestion: {req.query}\nAnswer:"
