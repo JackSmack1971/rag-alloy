@@ -6,6 +6,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from retriever.base import BaseRetriever
 from index.embedding_store import TextDoc
+import networkx as nx
 
 
 class FakeStore:
@@ -27,7 +28,23 @@ def test_hybrid_rrf_fuses_results():
     store = FakeStore(corpus)
     retriever = BaseRetriever(store, corpus)
 
-    res = retriever.retrieve("beta", top_k=2, mode="hybrid")
-    texts = [d.text for d in res]
+    docs, graph_ctx = retriever.retrieve("beta", top_k=2, mode="hybrid")
+    texts = [d.text for d in docs]
     assert texts[0] in {"alpha beta", "beta gamma"}
-    assert len(res) == 2
+    assert len(docs) == 2
+    assert graph_ctx is None
+
+
+def test_graph_expansion_returns_neighbors():
+    corpus = ["Alice met Bob in Paris"]
+    store = FakeStore(corpus)
+    g = nx.Graph()
+    g.add_edge("Alice", "Bob")
+    g.add_edge("Bob", "Eve")
+    retriever = BaseRetriever(store, corpus, graph=g)
+
+    docs, graph_ctx = retriever.retrieve("Alice", top_k=1, mode="semantic", graph=True)
+    assert docs[0].text == "Alice met Bob in Paris"
+    assert graph_ctx is not None
+    assert "Eve" in graph_ctx["nodes"]
+    assert ("Bob", "Eve") in graph_ctx["edges"] or ("Eve", "Bob") in graph_ctx["edges"]
