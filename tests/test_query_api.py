@@ -12,16 +12,16 @@ from index.embedding_store import TextDoc
 
 
 class FakeStore:
-    def __init__(self, docs: list[str]):
+    def __init__(self, docs: list[TextDoc]):
         self.docs = docs
 
     def add_texts(self, texts, metadatas=None):
         pass
 
     def query(self, query: str, top_k: int = 5):
-        matches = [d for d in self.docs if query in d]
+        matches = [d for d in self.docs if query in d.text]
         matches.reverse()
-        return [TextDoc(text=m, tags={}) for m in matches[:top_k]]
+        return matches[:top_k]
 
 
 def _reload_app():
@@ -32,7 +32,11 @@ def _reload_app():
 
 def test_query_returns_ranked_scores():
     main = _reload_app()
-    corpus = ["alpha beta", "beta gamma", "gamma delta"]
+    corpus = [
+        TextDoc(text="alpha beta", tags={"file_id": "f1", "page": 1, "span": [0, 10]}),
+        TextDoc(text="beta gamma", tags={"file_id": "f2", "page": 2, "span": [0, 10]}),
+        TextDoc(text="gamma delta", tags={"file_id": "f3", "page": 3, "span": [0, 10]}),
+    ]
     store = FakeStore(corpus)
     main.retriever = BaseRetriever(store, corpus)
     client = TestClient(main.app)
@@ -44,6 +48,9 @@ def test_query_returns_ranked_scores():
     body = res.json()
     assert body["answer"] == ""
     assert len(body["results"]) == 2
+    assert len(body["citations"]) == 2
     first = body["results"][0]
     assert first["rank"] == 1
     assert set(first["scores"].keys()) == {"semantic", "lexical"}
+    assert "file_id" in first
+    assert body["citations"][0]["file_id"] == first["file_id"]

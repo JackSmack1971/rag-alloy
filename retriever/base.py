@@ -47,27 +47,29 @@ class BaseRetriever:
     def __init__(
         self,
         store: EmbeddingStore,
-        corpus: Sequence[str] | None = None,
+        corpus: Sequence[TextDoc] | None = None,
         graph: Any | None = None,
     ) -> None:
         self.store = store
-        self.corpus: List[str] = list(corpus or [])
-        self.bm25 = BM25Okapi([c.split() for c in self.corpus]) if self.corpus else None
+        self.corpus: List[TextDoc] = list(corpus or [])
+        self.bm25 = (
+            BM25Okapi([c.text.split() for c in self.corpus]) if self.corpus else None
+        )
         self.graph = graph
         if corpus:
-            # Ensure texts are available in the embedding store.
-            self.store.add_texts(corpus)
+            # Ensure texts and metadata are available in the embedding store.
+            self.store.add_texts([c.text for c in corpus], [c.tags for c in corpus])
 
     # ------------------------------------------------------------------
-    def add_texts(self, texts: Iterable[str]) -> None:
-        """Add ``texts`` to both semantic and lexical indices."""
+    def add_texts(self, docs: Iterable[TextDoc]) -> None:
+        """Add ``docs`` to both semantic and lexical indices."""
 
-        new_texts = list(texts)
-        if not new_texts:
+        new_docs = list(docs)
+        if not new_docs:
             return
-        self.corpus.extend(new_texts)
-        self.store.add_texts(new_texts)
-        tokenized = [c.split() for c in self.corpus]
+        self.corpus.extend(new_docs)
+        self.store.add_texts([d.text for d in new_docs], [d.tags for d in new_docs])
+        tokenized = [c.text.split() for c in self.corpus]
         self.bm25 = BM25Okapi(tokenized)
 
     # ------------------------------------------------------------------
@@ -76,7 +78,7 @@ class BaseRetriever:
             return []
         scores = self.bm25.get_scores(query.split())
         ranked = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)[:top_k]
-        return [RetrievedDoc(TextDoc(text=self.corpus[i], tags={}), score=s) for i, s in ranked]
+        return [RetrievedDoc(self.corpus[i], score=s) for i, s in ranked]
 
     # ------------------------------------------------------------------
     def _semantic_search(self, query: str, top_k: int) -> List[RetrievedDoc]:

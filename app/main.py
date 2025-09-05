@@ -12,6 +12,7 @@ from models.query import (
     QueryRequest,
     QueryResponse,
     RankedDocument,
+    Citation,
     RetrieverScores,
 )
 from reasoner.runner import Runner
@@ -96,16 +97,33 @@ def query(req: QueryRequest) -> QueryResponse:
         fused_docs = retriever._fuse([sem, lex], req.top_k)
 
     results: list[RankedDocument] = []
+    citations: list[Citation] = []
     for rank, doc in enumerate(fused_docs, start=1):
         text = doc.text
         sem_score = next((d.score for d in sem if d.doc.text == text), None)
         lex_score = next((d.score for d in lex if d.doc.text == text), None)
         scores = RetrieverScores(semantic=sem_score, lexical=lex_score)
-        results.append(RankedDocument(text=text, rank=rank, scores=scores))
+        meta = doc.tags
+        file_id = meta.get("file_id", "")
+        page = meta.get("page")
+        span = tuple(meta["span"]) if "span" in meta else None
+        results.append(
+            RankedDocument(
+                text=text,
+                rank=rank,
+                file_id=file_id,
+                page=page,
+                span=span,
+                scores=scores,
+            )
+        )
+        citations.append(Citation(file_id=file_id, page=page, span=span))
 
     context = "\n\n".join(doc.text for doc in fused_docs)
     prompt = f"Context:\n{context}\n\nQuestion: {req.query}\nAnswer:"
     runner = Runner(req.provider)
     answer = runner.generate(prompt)
 
-    return QueryResponse(query=req.query, answer=answer, results=results)
+    return QueryResponse(
+        query=req.query, answer=answer, citations=citations, results=results
+    )
