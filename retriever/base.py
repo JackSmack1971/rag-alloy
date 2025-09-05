@@ -20,11 +20,17 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Iterable, List, Sequence
+from typing import Iterable, List, Sequence, Tuple, Dict, Any
 
 from rank_bm25 import BM25Okapi
 
 from index.embedding_store import EmbeddingStore, TextDoc
+from graph.entities import extract_entities
+
+try:
+    import networkx as nx
+except Exception:  # pragma: no cover - networkx is optional at runtime
+    nx = None  # type: ignore
 
 
 @dataclass
@@ -36,12 +42,18 @@ class RetrievedDoc:
 
 
 class BaseRetriever:
-    """Combine semantic and lexical retrieval with optional fusion."""
+    """Combine semantic and lexical retrieval with optional graph expansion."""
 
-    def __init__(self, store: EmbeddingStore, corpus: Sequence[str] | None = None) -> None:
+    def __init__(
+        self,
+        store: EmbeddingStore,
+        corpus: Sequence[str] | None = None,
+        graph: Any | None = None,
+    ) -> None:
         self.store = store
         self.corpus: List[str] = list(corpus or [])
         self.bm25 = BM25Okapi([c.split() for c in self.corpus]) if self.corpus else None
+        self.graph = graph
         if corpus:
             # Ensure texts are available in the embedding store.
             self.store.add_texts(corpus)
@@ -85,16 +97,82 @@ class BaseRetriever:
         return [docs[key] for key, _ in ranked]
 
     # ------------------------------------------------------------------
-    def retrieve(self, query: str, top_k: int = 5, mode: str = "hybrid") -> List[TextDoc]:
-        """Retrieve documents matching ``query`` using ``mode``."""
+    def _expand_graph(self, docs: Sequence[TextDoc]) -> Dict[str, Any] | None:
+        """Extract entities from ``docs`` and fetch their neighbours.
+
+        Supports both ``networkx`` graphs and Neo4j drivers. The return value is
+        a dictionary with ``nodes`` and ``edges`` lists suitable for JSON
+        serialisation or ``None`` when no graph context is available.
+        """
+
+        if not self.graph:
+            return None
+        entities: List[str] = []
+        for d in docs:
+            entities.extend(extract_entities(d.text))
+        if not entities:
+            return None
+
+        graph_ctx: Dict[str, Any] = {"nodes": [], "edges": []}
+        if nx and isinstance(self.graph, nx.Graph):
+            seen: set[str] = set()
+            for ent in entities:
+                if self.graph.has_node(ent):
+                    seen.add(ent)
+                    for nbr in self.graph.neighbors(ent):
+                        graph_ctx["edges"].append((ent, nbr))
+                        seen.add(nbr)
+            graph_ctx["nodes"] = list(seen)
+            return graph_ctx if graph_ctx["nodes"] else None
+
+        # Neo4j driver support
+        if hasattr(self.graph, "session"):
+            with self.graph.session() as session:  # type: ignore[call-arg]
+                nodes: set[str] = set()
+                edges: List[Tuple[str, str]] = []
+                for ent in entities:
+                    result = session.run(
+                        "MATCH (e {name: $name})--(n) RETURN e.name AS src, n.name AS dst",
+                        {"name": ent},
+                    )
+                    for record in result:
+                        src = record["src"]
+                        dst = record["dst"]
+                        nodes.update({src, dst})
+                        edges.append((src, dst))
+            if nodes:
+                graph_ctx["nodes"] = list(nodes)
+                graph_ctx["edges"] = edges
+                return graph_ctx
+        return None
+
+    # ------------------------------------------------------------------
+    def retrieve(
+        self,
+        query: str,
+        top_k: int = 5,
+        mode: str = "hybrid",
+        graph: bool = False,
+    ) -> Tuple[List[TextDoc], Dict[str, Any] | None]:
+        """Retrieve documents matching ``query`` using ``mode``.
+
+        When ``graph`` is ``True`` and a graph was provided at initialisation,
+        neighbouring nodes of entities found in the retrieved documents are
+        returned as ``graph_context``.
+        """
 
         mode = mode.lower()
+        docs: List[TextDoc]
         if mode == "semantic":
-            return [rd.doc for rd in self._semantic_search(query, top_k)]
-        if mode == "lexical":
-            return [rd.doc for rd in self._lexical_search(query, top_k)]
-        if mode == "hybrid":
+            docs = [rd.doc for rd in self._semantic_search(query, top_k)]
+        elif mode == "lexical":
+            docs = [rd.doc for rd in self._lexical_search(query, top_k)]
+        elif mode == "hybrid":
             sem = self._semantic_search(query, top_k)
             lex = self._lexical_search(query, top_k)
-            return self._fuse([sem, lex], top_k)
-        raise ValueError(f"Unknown retrieval mode: {mode}")
+            docs = self._fuse([sem, lex], top_k)
+        else:
+            raise ValueError(f"Unknown retrieval mode: {mode}")
+
+        graph_ctx = self._expand_graph(docs) if graph else None
+        return docs, graph_ctx
