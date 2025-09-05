@@ -1,4 +1,5 @@
 from pathlib import Path
+from pathlib import Path
 import sys
 
 # Ensure repository root on path
@@ -10,7 +11,7 @@ import networkx as nx
 
 
 class FakeStore:
-    def __init__(self, docs: list[str]):
+    def __init__(self, docs: list[TextDoc]):
         self.docs = docs
 
     def add_texts(self, texts, metadatas=None):
@@ -18,13 +19,17 @@ class FakeStore:
 
     def query(self, query: str, top_k: int = 5):
         # naive semantic search: return docs containing the query word reversed order
-        matches = [d for d in self.docs if query in d]
+        matches = [d for d in self.docs if query in d.text]
         matches.reverse()
-        return [TextDoc(text=m, tags={}) for m in matches[:top_k]]
+        return matches[:top_k]
 
 
 def test_hybrid_rrf_fuses_results():
-    corpus = ["alpha beta", "beta gamma", "gamma delta"]
+    corpus = [
+        TextDoc(text="alpha beta", tags={"file_id": "f1"}),
+        TextDoc(text="beta gamma", tags={"file_id": "f2"}),
+        TextDoc(text="gamma delta", tags={"file_id": "f3"}),
+    ]
     store = FakeStore(corpus)
     retriever = BaseRetriever(store, corpus)
 
@@ -36,7 +41,7 @@ def test_hybrid_rrf_fuses_results():
 
 
 def test_graph_expansion_returns_neighbors():
-    corpus = ["Alice met Bob in Paris"]
+    corpus = [TextDoc(text="Alice met Bob in Paris", tags={"file_id": "f1"})]
     store = FakeStore(corpus)
     g = nx.Graph()
     g.add_edge("Alice", "Bob")

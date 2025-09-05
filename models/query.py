@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, List
+from typing import Literal, List, Tuple
 
 from pydantic import BaseModel, Field
 
@@ -24,11 +24,22 @@ class RetrieverScores(BaseModel):
 
 
 class RankedDocument(BaseModel):
-    """Retrieved text with fused ranking and retriever scores."""
+    """Retrieved text with fused ranking, metadata and retriever scores."""
 
     text: str
     rank: int
+    file_id: str
+    page: int | None = None
+    span: Tuple[int, int] | None = None
     scores: RetrieverScores = Field(default_factory=RetrieverScores)
+
+
+class Citation(BaseModel):
+    """Source location for an answer segment."""
+
+    file_id: str
+    page: int | None = None
+    span: Tuple[int, int] | None = None
 
 
 class QueryResponse(BaseModel):
@@ -36,4 +47,5 @@ class QueryResponse(BaseModel):
 
     query: str
     answer: str = ""
+    citations: List[Citation] = Field(default_factory=list)
     results: List[RankedDocument] = Field(default_factory=list)
