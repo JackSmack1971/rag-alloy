@@ -6,6 +6,7 @@ import os
 from typing import Any
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from prometheus_fastapi_instrumentator import Instrumentator
 from qdrant_client import QdrantClient
 
 from models.query import (
@@ -30,6 +31,8 @@ else:
 
 app = FastAPI()
 
+Instrumentator().instrument(app).expose(app, include_in_schema=False, endpoint="/metrics")
+
 
 retriever: BaseRetriever | None = None
 
@@ -47,6 +50,13 @@ async def ingest(file: UploadFile = File(...)) -> dict[str, Any]:
     if size > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="File too large")
     return {"job_id": "todo"}
+
+
+@app.get("/healthz")
+def healthz() -> dict[str, str]:
+    """Return service health status."""
+
+    return {"status": "ok"}
 
 
 @app.get("/collections/{collection}/stats")

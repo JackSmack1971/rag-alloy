@@ -8,6 +8,8 @@ FastAPI service with file ingestion capabilities.
 - `GET /collections/{collection}/stats` – retrieve vector and point counts for a collection.
 - `DELETE /collections/{collection}` – remove a collection and all associated vectors and metadata.
 - `POST /query` – retrieve text chunks for a query. The response includes per-retriever scores, fused ranking, and citations with `file_id`, `page`, character `span`, and the cited text segment. When `graph=true`, neighboring nodes from a NetworkX or Neo4j graph are returned based on spaCy entity extraction.
+- `GET /healthz` – report service health status.
+- `GET /metrics` – Prometheus metrics for the service.
 
 ## Configuration
 
