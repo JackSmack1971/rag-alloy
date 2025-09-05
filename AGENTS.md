@@ -69,7 +69,8 @@ settings[21].
 ingest/
 Parsers, chunkers and OCR hooks for file ingestion[21].
 index/
-Qdrant/DocArray adapters and BM25 index code[21].
+Qdrant/DocArray adapters and BM25 index code[21]. Includes an embedding store
+that hashes text with SHA-256 to deduplicate and persists DocArray metadata.
 graph/
 networkx + Neo4j adapters for optional graph enrichment[21].
 retriever/
