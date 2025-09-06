@@ -59,6 +59,7 @@ def _save_jobs() -> None:
         json.dumps({jid: job.model_dump(mode="json") for jid, job in JOBS.items()})
     )
 
+
 if location := os.environ.get("QDRANT_LOCATION"):
     qdrant = QdrantClient(location=location)
     store = EmbeddingStore(location=location)
@@ -108,7 +109,9 @@ async def ingest(file: UploadFile = File(...)) -> dict[str, Any]:
     try:
         elements = parse_document(dest)
         full_text = "\n\n".join(
-            getattr(el, "text", "") for el in elements if getattr(el, "text", "").strip()
+            getattr(el, "text", "")
+            for el in elements
+            if getattr(el, "text", "").strip()
         )
         chunks = chunk_text(full_text)
         metadatas = [{"file_id": job_id} for _ in chunks]
@@ -167,9 +170,7 @@ def collection_stats(collection: str) -> dict[str, Any]:
     return {"points_count": info.points_count, "vectors_count": info.vectors_count}
 
 
-@app.delete(
-    "/collections/{collection}", dependencies=[Depends(require_auth)]
-)
+@app.delete("/collections/{collection}", dependencies=[Depends(require_auth)])
 def delete_collection(collection: str) -> dict[str, Any]:
     """Delete ``collection`` from Qdrant along with all stored data."""
 
@@ -207,7 +208,10 @@ def query(req: QueryRequest) -> QueryResponse:
 
     settings = get_settings()
     graph_ctx = (
-        retriever._expand_graph(fused_docs)
+        retriever._expand_graph(
+            fused_docs,
+            req.graph_params.dict() if req.graph_params else None,
+        )
         if req.graph and settings.graph_enabled
         else None
     )
