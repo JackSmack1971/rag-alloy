@@ -1,5 +1,9 @@
+from __future__ import annotations
+
 from pathlib import Path
+import importlib
 import sys
+import types
 import uuid
 
 import pytest
@@ -13,8 +17,10 @@ class DummyStore:
     def __init__(self, *_, **__):
         self.texts: list[str] = []
         self.metadatas: list[dict] = []
+        self.calls = 0
 
     def add_texts(self, texts, metadatas=None):
+        self.calls += 1
         self.texts = list(texts)
         self.metadatas = list(metadatas) if metadatas else []
         return [f"id{i}" for i, _ in enumerate(self.texts)]
@@ -28,14 +34,18 @@ class DummyElement:
 @pytest.fixture()
 def app_monkeypatched(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "version_info", (3, 11, 0, "final", 0))
-    monkeypatch.setattr("index.embedding_store.EmbeddingStore", DummyStore)
-    import app.main as main
-
-    monkeypatch.setattr(
-        main, "parse_document", lambda path: [DummyElement("hello world")]
-    )
+    dummy_module = types.ModuleType("index.embedding_store")
+    dummy_module.EmbeddingStore = DummyStore
+    dummy_module.TextDoc = object
+    sys.modules["index.embedding_store"] = dummy_module
+    sys.modules.pop("app.main", None)
+    main = importlib.import_module("app.main")
+    monkeypatch.setattr(main, "parse_document", lambda path: [DummyElement("hello world")])
     monkeypatch.setattr(main, "chunk_text", lambda text: ["hello", "world"])
     monkeypatch.setattr(main, "UPLOAD_DIR", tmp_path)
+    main.HASH_TO_JOB.clear()
+    if main.HASH_MAP_PATH.exists():
+        main.HASH_MAP_PATH.unlink()
     return main
 
 
@@ -52,3 +62,12 @@ def test_ingest_pipeline(app_monkeypatched):
         {"file_id": job_id},
         {"file_id": job_id},
     ]
+
+
+def test_ingest_skips_duplicate(app_monkeypatched):
+    client = TestClient(app_monkeypatched.app)
+    files = {"file": ("test.pdf", b"dummy", "application/pdf")}
+    job1 = client.post("/ingest", files=files).json()["job_id"]
+    job2 = client.post("/ingest", files=files).json()["job_id"]
+    assert job1 == job2
+    assert app_monkeypatched.store.calls == 1
