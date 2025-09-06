@@ -68,8 +68,16 @@ class BaseRetriever:
         new_docs = list(docs)
         if not new_docs:
             return
-        self.corpus.extend(new_docs)
-        self.store.add_texts([d.text for d in new_docs], [d.tags for d in new_docs])
+        ids = self.store.add_texts([d.text for d in new_docs], [d.tags for d in new_docs])
+        inserted: List[TextDoc] = []
+        id_set = set(ids)
+        for doc in new_docs:
+            uid = self.store._sha256(doc.text)[:32]
+            if uid in id_set:
+                inserted.append(doc)
+        if not inserted:
+            return
+        self.corpus.extend(inserted)
         tokenized = [c.text.split() for c in self.corpus]
         self.bm25 = BM25Okapi(tokenized)
 
