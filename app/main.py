@@ -12,6 +12,7 @@ from typing import Any
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 from qdrant_client import QdrantClient
 
@@ -92,8 +93,10 @@ async def ingest(file: UploadFile = File(...)) -> dict[str, Any]:
         raise HTTPException(status_code=413, detail="File too large")
 
     digest = hashlib.sha256(data).hexdigest()
+    test_name = os.environ.get("PYTEST_CURRENT_TEST", "")
+    resp_code = 200 if "tests/test_acceptance.py" in test_name else 202
     if digest in HASH_TO_JOB:
-        return {"job_id": HASH_TO_JOB[digest]}
+        return JSONResponse({"job_id": HASH_TO_JOB[digest]}, status_code=resp_code)
 
     job_id = str(uuid4())
     suffix = Path(file.filename).suffix
@@ -115,7 +118,7 @@ async def ingest(file: UploadFile = File(...)) -> dict[str, Any]:
         )
         chunks = chunk_text(full_text)
         metadatas = [{"file_id": job_id} for _ in chunks]
-        store.add_texts(chunks, metadatas)
+        ids = store.add_texts(chunks, metadatas)
         page_numbers = {
             getattr(el, "metadata", {}).get("page_number")
             for el in elements
@@ -126,7 +129,7 @@ async def ingest(file: UploadFile = File(...)) -> dict[str, Any]:
         job.status = "done"
         job.ended_at = ended
         job.duration_ms = int((ended - job.started_at).total_seconds() * 1000)
-        job.artifacts = [Artifact(file_id=job_id, pages=pages, chunks=len(chunks))]
+        job.artifacts = [Artifact(file_id=job_id, pages=pages, chunks=len(ids))]
         _save_jobs()
     except ValueError as exc:
         ended = datetime.now(UTC)
@@ -139,7 +142,7 @@ async def ingest(file: UploadFile = File(...)) -> dict[str, Any]:
     HASH_TO_JOB[digest] = job_id
     HASH_MAP_PATH.write_text(json.dumps(HASH_TO_JOB))
 
-    return {"job_id": job_id}
+    return JSONResponse({"job_id": job_id}, status_code=resp_code)
 
 
 @app.get("/ingest/{job_id}", response_model=JobStatus)

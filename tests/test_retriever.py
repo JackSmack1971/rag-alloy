@@ -1,5 +1,6 @@
 from pathlib import Path
 import sys
+import hashlib
 
 # Ensure repository root on path
 sys.path.append(str(Path(__file__).resolve().parents[1]))
@@ -21,6 +22,29 @@ class FakeStore:
         matches = [d for d in self.docs if query in d.text]
         matches.reverse()
         return matches[:top_k]
+
+
+class DummyStore:
+    def __init__(self) -> None:
+        self.texts: dict[str, TextDoc] = {}
+
+    def _sha256(self, text: str) -> str:
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+    def add_texts(self, texts, metadatas=None):
+        metas = list(metadatas) if metadatas else [{} for _ in texts]
+        ids = []
+        for text, meta in zip(texts, metas):
+            full_hash = self._sha256(text)
+            uid = full_hash[:32]
+            if uid in self.texts:
+                continue
+            self.texts[uid] = TextDoc(text=text, tags=meta)
+            ids.append(uid)
+        return ids
+
+    def query(self, query: str, top_k: int = 5):
+        return []
 
 
 def test_hybrid_rrf_fuses_results():
@@ -60,3 +84,12 @@ def test_graph_expansion_returns_neighbors():
     assert graph_ctx is not None
     assert "Eve" in graph_ctx["nodes"]
     assert ("Bob", "Eve") in graph_ctx["edges"] or ("Eve", "Bob") in graph_ctx["edges"]
+
+
+def test_add_texts_skips_existing_ids():
+    store = DummyStore()
+    retriever = BaseRetriever(store)
+    doc = TextDoc(text="repeat", tags={"file_id": "f1"})
+    retriever.add_texts([doc])
+    retriever.add_texts([doc])
+    assert len(retriever.corpus) == 1

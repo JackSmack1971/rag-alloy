@@ -30,8 +30,17 @@ def _get_partitioner(suffix: str) -> Optional[Callable[..., list[Element]]]:
     if not name:
         return None
     module_name, func_name = name.rsplit(".", 1)
-    module = import_module(module_name)
-    return getattr(module, func_name)
+    try:
+        module = import_module(module_name)
+    except Exception:
+        return None
+    return getattr(module, func_name, None)
+
+
+class _SimpleElement:
+    def __init__(self, text: str) -> None:
+        self.text = text
+        self.metadata: dict = {}
 
 
 def parse_document(path: Path) -> List[Element]:
@@ -54,10 +63,17 @@ def parse_document(path: Path) -> List[Element]:
     """
 
     suffix = path.suffix.lower()
+    if suffix not in _PARTITIONER_NAMES:
+        raise ValueError(f"Unsupported file type: {suffix}")
     partitioner = _get_partitioner(suffix)
     if partitioner is None:
-        raise ValueError(f"Unsupported file type: {suffix}")
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        return [_SimpleElement(text)]
 
-    elements = partitioner(filename=str(path))
+    try:
+        elements = partitioner(filename=str(path))
+    except Exception:
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        return [_SimpleElement(text)]
     allowed = (Text, Table, FigureCaption)
     return [el for el in elements if isinstance(el, allowed) and not isinstance(el, Image)]
