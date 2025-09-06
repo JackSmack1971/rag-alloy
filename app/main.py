@@ -11,13 +11,14 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from prometheus_fastapi_instrumentator import Instrumentator
 from qdrant_client import QdrantClient
 
 from ingest.parsers import parse_document
 from ingest.chunking import chunk_text
 from index.embedding_store import EmbeddingStore
+from app.auth import require_auth
 
 if sys.version_info[:2] != (3, 11):  # pragma: no cover - defensive startup check
     raise SystemExit("Python 3.11 is required")
@@ -76,7 +77,7 @@ Instrumentator().instrument(app).expose(
 retriever: BaseRetriever | None = None
 
 
-@app.post("/ingest", status_code=202)
+@app.post("/ingest", status_code=202, dependencies=[Depends(require_auth)])
 async def ingest(file: UploadFile = File(...)) -> dict[str, Any]:
     """Accept a file upload, embed its contents and return a job ID.
 
@@ -165,7 +166,9 @@ def collection_stats(collection: str) -> dict[str, Any]:
     return {"points_count": info.points_count, "vectors_count": info.vectors_count}
 
 
-@app.delete("/collections/{collection}")
+@app.delete(
+    "/collections/{collection}", dependencies=[Depends(require_auth)]
+)
 def delete_collection(collection: str) -> dict[str, Any]:
     """Delete ``collection`` from Qdrant along with all stored data."""
 

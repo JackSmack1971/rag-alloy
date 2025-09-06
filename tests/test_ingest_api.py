@@ -4,6 +4,7 @@ from pathlib import Path
 import importlib
 import sys
 import types
+import collections
 import uuid
 
 import pytest
@@ -33,7 +34,39 @@ class DummyElement:
 
 @pytest.fixture()
 def app_monkeypatched(tmp_path, monkeypatch):
-    monkeypatch.setattr(sys, "version_info", (3, 11, 0, "final", 0))
+    monkeypatch.setenv("APP_AUTH_MODE", "none")
+    Version = collections.namedtuple("Version", "major minor micro releaselevel serial")
+    monkeypatch.setattr(sys, "version_info", Version(3, 11, 0, "final", 0))
+    from app.settings import get_settings
+    get_settings.cache_clear()
+    dummy_module = types.ModuleType("index.embedding_store")
+    dummy_module.EmbeddingStore = DummyStore
+    dummy_module.TextDoc = object
+    sys.modules["index.embedding_store"] = dummy_module
+    sys.modules.pop("app.main", None)
+    main = importlib.import_module("app.main")
+    monkeypatch.setattr(main, "parse_document", lambda path: [DummyElement("hello world")])
+    monkeypatch.setattr(main, "chunk_text", lambda text: ["hello", "world"])
+    monkeypatch.setattr(main, "UPLOAD_DIR", tmp_path)
+    main.HASH_MAP_PATH = tmp_path / "hashes.json"
+    main.JOBS_PATH = tmp_path / "jobs.json"
+    main.HASH_TO_JOB.clear()
+    main.JOBS.clear()
+    if main.HASH_MAP_PATH.exists():
+        main.HASH_MAP_PATH.unlink()
+    if main.JOBS_PATH.exists():
+        main.JOBS_PATH.unlink()
+    return main
+
+
+@pytest.fixture()
+def app_with_auth(tmp_path, monkeypatch):
+    monkeypatch.setenv("APP_AUTH_MODE", "token")
+    monkeypatch.setenv("APP_TOKEN", "secret")
+    Version = collections.namedtuple("Version", "major minor micro releaselevel serial")
+    monkeypatch.setattr(sys, "version_info", Version(3, 11, 0, "final", 0))
+    from app.settings import get_settings
+    get_settings.cache_clear()
     dummy_module = types.ModuleType("index.embedding_store")
     dummy_module.EmbeddingStore = DummyStore
     dummy_module.TextDoc = object
@@ -82,3 +115,14 @@ def test_ingest_skips_duplicate(app_monkeypatched):
     job2 = client.post("/ingest", files=files).json()["job_id"]
     assert job1 == job2
     assert app_monkeypatched.store.calls == 1
+
+
+def test_ingest_requires_auth(app_with_auth):
+    client = TestClient(app_with_auth.app)
+    files = {"file": ("test.pdf", b"dummy", "application/pdf")}
+    resp = client.post("/ingest", files=files)
+    assert resp.status_code == 401
+    resp = client.post(
+        "/ingest", files=files, headers={"Authorization": "Bearer secret"}
+    )
+    assert resp.status_code == 202
