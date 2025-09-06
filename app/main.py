@@ -4,11 +4,17 @@ from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from prometheus_fastapi_instrumentator import Instrumentator
 from qdrant_client import QdrantClient
+
+from ingest.parsers import parse_document
+from ingest.chunking import chunk_text
+from index.embedding_store import EmbeddingStore
 
 if sys.version_info[:2] != (3, 11):  # pragma: no cover - defensive startup check
     raise SystemExit("Python 3.11 is required")
@@ -24,26 +30,31 @@ from reasoner.runner import Runner
 from retriever.base import BaseRetriever
 
 MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", 50 * 1024 * 1024))
+UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 if location := os.environ.get("QDRANT_LOCATION"):
     qdrant = QdrantClient(location=location)
+    store = EmbeddingStore(location=location)
 else:
-    qdrant = QdrantClient(
-        host=os.environ.get("QDRANT_HOST", "localhost"),
-        port=int(os.environ.get("QDRANT_PORT", "6333")),
-    )
+    host = os.environ.get("QDRANT_HOST", "localhost")
+    port = int(os.environ.get("QDRANT_PORT", "6333"))
+    qdrant = QdrantClient(host=host, port=port)
+    store = EmbeddingStore(host=host, port=port)
 
 app = FastAPI()
 
-Instrumentator().instrument(app).expose(app, include_in_schema=False, endpoint="/metrics")
+Instrumentator().instrument(app).expose(
+    app, include_in_schema=False, endpoint="/metrics"
+)
 
 
 retriever: BaseRetriever | None = None
 
 
-@app.post("/ingest")
+@app.post("/ingest", status_code=202)
 async def ingest(file: UploadFile = File(...)) -> dict[str, Any]:
-    """Accept a file upload and return a job identifier placeholder.
+    """Accept a file upload, embed its contents and return a job ID.
 
     The request is rejected with HTTP 413 when the file exceeds
     ``MAX_UPLOAD_BYTES``.
@@ -53,7 +64,25 @@ async def ingest(file: UploadFile = File(...)) -> dict[str, Any]:
     file.file.seek(0)
     if size > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="File too large")
-    return {"job_id": "todo"}
+
+    job_id = str(uuid4())
+    suffix = Path(file.filename).suffix
+    dest = UPLOAD_DIR / f"{job_id}{suffix}"
+    dest.write_bytes(await file.read())
+
+    try:
+        elements = parse_document(dest)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    full_text = "\n\n".join(
+        getattr(el, "text", "") for el in elements if getattr(el, "text", "").strip()
+    )
+    chunks = chunk_text(full_text)
+    metadatas = [{"file_id": job_id} for _ in chunks]
+    store.add_texts(chunks, metadatas)
+
+    return {"job_id": job_id}
 
 
 @app.get("/healthz")
