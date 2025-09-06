@@ -5,6 +5,7 @@ FastAPI service with file ingestion capabilities.
 ## API
 
 - `POST /ingest` – upload a file and receive a job identifier. Files larger than `MAX_UPLOAD_BYTES` (default 50MB) are rejected with HTTP 413. Re-uploading an identical file returns the existing job ID without reprocessing.
+- `GET /ingest/{job_id}` – retrieve status and artifact metadata for an ingestion job.
 - `GET /collections/{collection}/stats` – retrieve vector and point counts for a collection.
 - `DELETE /collections/{collection}` – remove a collection and all associated vectors and metadata.
 - `POST /query` – retrieve text chunks for a query. The response includes per-retriever scores, fused ranking, and citations with `file_id`, `page`, character `span`, and the cited text segment. When `graph=true`, neighboring nodes from a NetworkX or Neo4j graph are returned based on spaCy entity extraction.
