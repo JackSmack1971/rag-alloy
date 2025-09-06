@@ -5,6 +5,8 @@ from pathlib import Path
 import importlib
 import os
 import sys
+import types
+import collections
 
 from fastapi.testclient import TestClient
 
@@ -17,8 +19,12 @@ from reasoner.runner import Runner
 
 def _reload_app():
     os.environ["QDRANT_LOCATION"] = ":memory:"
-    sys.version_info = (3, 11, 0)  # type: ignore[attr-defined]
+    os.environ["APP_AUTH_MODE"] = "none"
+    Version = collections.namedtuple("Version", "major minor micro releaselevel serial")
+    sys.version_info = Version(3, 11, 0, "final", 0)  # type: ignore[attr-defined]
     import app.main as main
+    from app.settings import get_settings
+    get_settings.cache_clear()
     return importlib.reload(main)
 
 

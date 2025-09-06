@@ -12,12 +12,16 @@ FastAPI service with file ingestion capabilities.
 - `GET /healthz` – report service health status.
 - `GET /metrics` – Prometheus metrics for the service.
 
+`POST /ingest` and `DELETE /collections/{collection}` require `Authorization: Bearer <APP_TOKEN>` when `APP_AUTH_MODE` is set to `token`.
+
 ## Configuration
 
-The ingestion pipeline respects the following environment variables:
+The service respects the following environment variables:
 
 - `CHUNK_SIZE` – max characters per chunk during ingestion (default 800).
 - `CHUNK_OVERLAP` – number of overlapping characters between chunks (default 120).
+- `APP_AUTH_MODE` – set to `token` (default) to require `Authorization: Bearer <APP_TOKEN>` for mutating endpoints or `none` to disable authentication.
+- `APP_TOKEN` – bearer token used when `APP_AUTH_MODE=token` (default `change_me`).
 
 ## Index
 

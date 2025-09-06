@@ -2,6 +2,8 @@ from pathlib import Path
 import sys
 import os
 import importlib
+import types
+import collections
 
 # Ensure repo root in path
 sys.path.append(str(Path(__file__).resolve().parents[1]))
@@ -11,7 +13,8 @@ from fastapi.testclient import TestClient
 
 def _reload_app():
     os.environ["QDRANT_LOCATION"] = ":memory:"
-    sys.version_info = (3, 11, 0)  # type: ignore[attr-defined]
+    Version = collections.namedtuple("Version", "major minor micro releaselevel serial")
+    sys.version_info = Version(3, 11, 0, "final", 0)  # type: ignore[attr-defined]
     import app.main as main
     return importlib.reload(main)
 
