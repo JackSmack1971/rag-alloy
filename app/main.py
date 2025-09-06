@@ -19,6 +19,7 @@ from ingest.parsers import parse_document
 from ingest.chunking import chunk_text
 from index.embedding_store import EmbeddingStore
 from app.auth import require_auth
+from app.settings import get_settings
 
 if sys.version_info[:2] != (3, 11):  # pragma: no cover - defensive startup check
     raise SystemExit("Python 3.11 is required")
@@ -204,6 +205,13 @@ def query(req: QueryRequest) -> QueryResponse:
     else:
         fused_docs = retriever._fuse([sem, lex], req.top_k)
 
+    settings = get_settings()
+    graph_ctx = (
+        retriever._expand_graph(fused_docs)
+        if req.graph and settings.graph_enabled
+        else None
+    )
+
     results: list[RankedDocument] = []
     citations: list[Citation] = []
     for rank, doc in enumerate(fused_docs, start=1):
@@ -233,5 +241,9 @@ def query(req: QueryRequest) -> QueryResponse:
     answer = runner.generate(prompt)
 
     return QueryResponse(
-        query=req.query, answer=answer, citations=citations, results=results
+        query=req.query,
+        answer=answer,
+        citations=citations,
+        results=results,
+        graph_context=graph_ctx,
     )

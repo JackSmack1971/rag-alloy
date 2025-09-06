@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, List, Tuple
+from typing import Any, Dict, List, Literal, Tuple
 
 from pydantic import BaseModel, Field
 
@@ -14,6 +14,7 @@ class QueryRequest(BaseModel):
     top_k: int = 5
     mode: Literal["semantic", "lexical", "hybrid"] = "hybrid"
     provider: Literal["none", "transformers", "ollama"] = "none"
+    graph: bool = False
 
 
 class RetrieverScores(BaseModel):
@@ -50,3 +51,4 @@ class QueryResponse(BaseModel):
     answer: str = ""
     citations: List[Citation] = Field(default_factory=list)
     results: List[RankedDocument] = Field(default_factory=list)
+    graph_context: Dict[str, Any] | None = None
