@@ -1,5 +1,4 @@
 from pathlib import Path
-from pathlib import Path
 import sys
 
 # Ensure repository root on path
@@ -50,7 +49,13 @@ def test_graph_expansion_returns_neighbors():
     g.add_edge("Bob", "Eve")
     retriever = BaseRetriever(store, corpus, graph=g)
 
-    docs, graph_ctx = retriever.retrieve("Alice", top_k=1, mode="semantic", graph=True)
+    docs, graph_ctx = retriever.retrieve(
+        "Alice",
+        top_k=1,
+        mode="semantic",
+        graph=True,
+        graph_params={"neighbors": 5, "depth": 2},
+    )
     assert docs[0].text == "Alice met Bob in Paris"
     assert graph_ctx is not None
     assert "Eve" in graph_ctx["nodes"]

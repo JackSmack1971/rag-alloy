@@ -20,7 +20,8 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Iterable, List, Sequence, Tuple, Dict, Any
+from typing import Iterable, List, Sequence, Tuple, Dict, Any, Mapping
+from itertools import islice
 
 from rank_bm25 import BM25Okapi
 
@@ -87,7 +88,9 @@ class BaseRetriever:
         return [RetrievedDoc(doc=d, score=1.0) for d in docs]
 
     # ------------------------------------------------------------------
-    def _fuse(self, results: Sequence[Sequence[RetrievedDoc]], top_k: int, k: int = 60) -> List[TextDoc]:
+    def _fuse(
+        self, results: Sequence[Sequence[RetrievedDoc]], top_k: int, k: int = 60
+    ) -> List[TextDoc]:
         scores: defaultdict[str, float] = defaultdict(float)
         docs: dict[str, TextDoc] = {}
         for result_set in results:
@@ -99,16 +102,26 @@ class BaseRetriever:
         return [docs[key] for key, _ in ranked]
 
     # ------------------------------------------------------------------
-    def _expand_graph(self, docs: Sequence[TextDoc]) -> Dict[str, Any] | None:
+    def _expand_graph(
+        self,
+        docs: Sequence[TextDoc],
+        params: Mapping[str, int] | None = None,
+    ) -> Dict[str, Any] | None:
         """Extract entities from ``docs`` and fetch their neighbours.
 
-        Supports both ``networkx`` graphs and Neo4j drivers. The return value is
-        a dictionary with ``nodes`` and ``edges`` lists suitable for JSON
-        serialisation or ``None`` when no graph context is available.
+        ``params`` may specify ``neighbors`` (max neighbours per entity) and
+        ``depth`` (traversal depth). Supports both ``networkx`` graphs and Neo4j
+        drivers. The return value is a dictionary with ``nodes`` and ``edges``
+        lists suitable for JSON serialisation or ``None`` when no graph context
+        is available.
         """
 
         if not self.graph:
             return None
+
+        neighbors = params.get("neighbors", 5) if params else 5
+        depth = params.get("depth", 1) if params else 1
+
         entities: List[str] = []
         for d in docs:
             entities.extend(extract_entities(d.text))
@@ -121,9 +134,10 @@ class BaseRetriever:
             for ent in entities:
                 if self.graph.has_node(ent):
                     seen.add(ent)
-                    for nbr in self.graph.neighbors(ent):
-                        graph_ctx["edges"].append((ent, nbr))
-                        seen.add(nbr)
+                    edges_iter = nx.bfs_edges(self.graph, ent, depth_limit=depth)
+                    for src, dst in islice(edges_iter, neighbors):
+                        graph_ctx["edges"].append((src, dst))
+                        seen.update({src, dst})
             graph_ctx["nodes"] = list(seen)
             return graph_ctx if graph_ctx["nodes"] else None
 
@@ -133,10 +147,12 @@ class BaseRetriever:
                 nodes: set[str] = set()
                 edges: List[Tuple[str, str]] = []
                 for ent in entities:
-                    result = session.run(
-                        "MATCH (e {name: $name})--(n) RETURN e.name AS src, n.name AS dst",
-                        {"name": ent},
+                    query = (
+                        f"MATCH (e {{name: $name}})-[*1..{depth}]-(n) "
+                        "RETURN e.name AS src, n.name AS dst "
+                        "LIMIT $limit"
                     )
+                    result = session.run(query, {"name": ent, "limit": neighbors})
                     for record in result:
                         src = record["src"]
                         dst = record["dst"]
@@ -155,12 +171,14 @@ class BaseRetriever:
         top_k: int = 5,
         mode: str = "hybrid",
         graph: bool = False,
+        graph_params: Mapping[str, int] | None = None,
     ) -> Tuple[List[TextDoc], Dict[str, Any] | None]:
         """Retrieve documents matching ``query`` using ``mode``.
 
         When ``graph`` is ``True`` and a graph was provided at initialisation,
         neighbouring nodes of entities found in the retrieved documents are
-        returned as ``graph_context``.
+        returned as ``graph_context``. ``graph_params`` can limit expansion via
+        ``neighbors`` and ``depth``.
         """
 
         mode = mode.lower()
@@ -176,5 +194,5 @@ class BaseRetriever:
         else:
             raise ValueError(f"Unknown retrieval mode: {mode}")
 
-        graph_ctx = self._expand_graph(docs) if graph else None
+        graph_ctx = self._expand_graph(docs, graph_params) if graph else None
         return docs, graph_ctx

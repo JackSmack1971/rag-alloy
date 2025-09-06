@@ -8,7 +8,7 @@ FastAPI service with file ingestion capabilities.
 - `GET /ingest/{job_id}` – retrieve status and artifact metadata for an ingestion job.
 - `GET /collections/{collection}/stats` – retrieve vector and point counts for a collection.
 - `DELETE /collections/{collection}` – remove a collection and all associated vectors and metadata.
-- `POST /query` – retrieve text chunks for a query. The response includes per-retriever scores, fused ranking, and citations with `file_id`, `page`, character `span`, and the cited text segment. When `graph` is true, neighboring nodes from a NetworkX or Neo4j graph are returned based on spaCy entity extraction.
+- `POST /query` – retrieve text chunks for a query. The response includes per-retriever scores, fused ranking, and citations with `file_id`, `page`, character `span`, and the cited text segment. When `graph` is true, neighboring nodes from a NetworkX or Neo4j graph are returned based on spaCy entity extraction. Optional `graph_params` control expansion (`neighbors`=5, `depth`=1 by default).
 - `GET /healthz` – report service health status.
 - `GET /metrics` – Prometheus metrics for the service.
 

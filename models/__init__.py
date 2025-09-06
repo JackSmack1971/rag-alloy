@@ -7,6 +7,7 @@ from .query import (
     RankedDocument,
     Citation,
     RetrieverScores,
+    GraphParams,
 )
 
 __all__ = [
@@ -17,4 +18,5 @@ __all__ = [
     "RankedDocument",
     "Citation",
     "RetrieverScores",
+    "GraphParams",
 ]

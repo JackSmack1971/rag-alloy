@@ -7,14 +7,26 @@ from typing import Any, Dict, List, Literal, Tuple
 from pydantic import BaseModel, Field
 
 
+class GraphParams(BaseModel):
+    """Optional parameters controlling graph expansion."""
+
+    neighbors: int = Field(5, ge=1, description="Max neighbors per entity")
+    depth: int = Field(1, ge=1, description="Traversal depth")
+
+
 class QueryRequest(BaseModel):
-    """Request payload for the ``/query`` endpoint."""
+    """Request payload for the ``/query`` endpoint.
+
+    ``graph_params`` can override graph expansion defaults (``neighbors``=5,
+    ``depth``=1).
+    """
 
     query: str
     top_k: int = 5
     mode: Literal["semantic", "lexical", "hybrid"] = "hybrid"
     provider: Literal["none", "transformers", "ollama"] = "none"
     graph: bool = False
+    graph_params: GraphParams | None = None
 
 
 class RetrieverScores(BaseModel):
