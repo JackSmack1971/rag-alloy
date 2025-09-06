@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -21,6 +22,7 @@ from index.embedding_store import EmbeddingStore
 if sys.version_info[:2] != (3, 11):  # pragma: no cover - defensive startup check
     raise SystemExit("Python 3.11 is required")
 
+from models.job import Artifact, JobStatus
 from models.query import (
     QueryRequest,
     QueryResponse,
@@ -39,6 +41,21 @@ if HASH_MAP_PATH.exists():
     HASH_TO_JOB: dict[str, str] = json.loads(HASH_MAP_PATH.read_text())
 else:
     HASH_TO_JOB = {}
+
+JOBS_PATH = UPLOAD_DIR / "jobs.json"
+if JOBS_PATH.exists():
+    JOBS: dict[str, JobStatus] = {
+        jid: JobStatus.model_validate(js)
+        for jid, js in json.loads(JOBS_PATH.read_text()).items()
+    }
+else:
+    JOBS = {}
+
+
+def _save_jobs() -> None:
+    JOBS_PATH.write_text(
+        json.dumps({jid: job.model_dump(mode="json") for jid, job in JOBS.items()})
+    )
 
 if location := os.environ.get("QDRANT_LOCATION"):
     qdrant = QdrantClient(location=location)
@@ -79,22 +96,55 @@ async def ingest(file: UploadFile = File(...)) -> dict[str, Any]:
     suffix = Path(file.filename).suffix
     dest = UPLOAD_DIR / f"{job_id}{suffix}"
     dest.write_bytes(data)
+    now = datetime.now(UTC)
+    job = JobStatus(status="pending", started_at=now)
+    JOBS[job_id] = job
+    _save_jobs()
+    job.status = "processing"
+    _save_jobs()
 
     try:
         elements = parse_document(dest)
+        full_text = "\n\n".join(
+            getattr(el, "text", "") for el in elements if getattr(el, "text", "").strip()
+        )
+        chunks = chunk_text(full_text)
+        metadatas = [{"file_id": job_id} for _ in chunks]
+        store.add_texts(chunks, metadatas)
+        page_numbers = {
+            getattr(el, "metadata", {}).get("page_number")
+            for el in elements
+            if getattr(el, "metadata", {}).get("page_number") is not None
+        }
+        pages = len(page_numbers) if page_numbers else 1
+        ended = datetime.now(UTC)
+        job.status = "done"
+        job.ended_at = ended
+        job.duration_ms = int((ended - job.started_at).total_seconds() * 1000)
+        job.artifacts = [Artifact(file_id=job_id, pages=pages, chunks=len(chunks))]
+        _save_jobs()
     except ValueError as exc:
+        ended = datetime.now(UTC)
+        job.status = "error"
+        job.ended_at = ended
+        job.duration_ms = int((ended - job.started_at).total_seconds() * 1000)
+        _save_jobs()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    full_text = "\n\n".join(
-        getattr(el, "text", "") for el in elements if getattr(el, "text", "").strip()
-    )
-    chunks = chunk_text(full_text)
-    metadatas = [{"file_id": job_id} for _ in chunks]
-    store.add_texts(chunks, metadatas)
     HASH_TO_JOB[digest] = job_id
     HASH_MAP_PATH.write_text(json.dumps(HASH_TO_JOB))
 
     return {"job_id": job_id}
+
+
+@app.get("/ingest/{job_id}", response_model=JobStatus)
+def get_job(job_id: str) -> JobStatus:
+    """Return status information for an ingestion job."""
+
+    job = JOBS.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
 
 
 @app.get("/healthz")

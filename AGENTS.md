@@ -5,7 +5,7 @@ Project Overview
 Purpose: Provide a single service that ingests heterogeneous files (PDF, DOCX, PPTX, XLSX, images), builds semantic/lexical indices and an optional knowledge graph, and answers questions with citations[3].
 Modes: Retrieval can operate in semantic, lexical or hybrid mode and can optionally enrich context via lightweight graph hops[4].
 Reasoning: A LangGraph‑based reasoner coordinates retrieval and invokes tools (calculator, CSV/XLSX aggregation, date/time) before delegating generation to a local HF or Ollama model when enabled[5].
-API & UI: Exposes REST endpoints for ingestion, querying and admin; ships a minimal HTML/JS chat panel with optional graph preview[6].
+API & UI: Exposes REST endpoints for ingestion, job status retrieval, querying and admin; ships a minimal HTML/JS chat panel with optional graph preview[6].
 Query responses expose per-retriever scores and fused rankings via ``models/query.py``. Citation objects include the cited text segment along with ``file_id``, ``page``, and character ``span``.
 Privacy & Security: Local processing by default; no network egress unless explicitly enabled. Mutating endpoints require token authentication[7][8].
 Setup Commands

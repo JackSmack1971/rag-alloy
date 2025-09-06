@@ -43,9 +43,14 @@ def app_monkeypatched(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "parse_document", lambda path: [DummyElement("hello world")])
     monkeypatch.setattr(main, "chunk_text", lambda text: ["hello", "world"])
     monkeypatch.setattr(main, "UPLOAD_DIR", tmp_path)
+    main.HASH_MAP_PATH = tmp_path / "hashes.json"
+    main.JOBS_PATH = tmp_path / "jobs.json"
     main.HASH_TO_JOB.clear()
+    main.JOBS.clear()
     if main.HASH_MAP_PATH.exists():
         main.HASH_MAP_PATH.unlink()
+    if main.JOBS_PATH.exists():
+        main.JOBS_PATH.unlink()
     return main
 
 
@@ -62,6 +67,12 @@ def test_ingest_pipeline(app_monkeypatched):
         {"file_id": job_id},
         {"file_id": job_id},
     ]
+    status = client.get(f"/ingest/{job_id}").json()
+    assert status["status"] == "done"
+    assert status["artifacts"] == [
+        {"file_id": job_id, "pages": 1, "chunks": 2}
+    ]
+    assert status["duration_ms"] >= 0
 
 
 def test_ingest_skips_duplicate(app_monkeypatched):
