@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import sys
 from pathlib import Path
@@ -32,6 +34,11 @@ from retriever.base import BaseRetriever
 MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", 50 * 1024 * 1024))
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+HASH_MAP_PATH = UPLOAD_DIR / "hashes.json"
+if HASH_MAP_PATH.exists():
+    HASH_TO_JOB: dict[str, str] = json.loads(HASH_MAP_PATH.read_text())
+else:
+    HASH_TO_JOB = {}
 
 if location := os.environ.get("QDRANT_LOCATION"):
     qdrant = QdrantClient(location=location)
@@ -59,16 +66,19 @@ async def ingest(file: UploadFile = File(...)) -> dict[str, Any]:
     The request is rejected with HTTP 413 when the file exceeds
     ``MAX_UPLOAD_BYTES``.
     """
-    file.file.seek(0, os.SEEK_END)
-    size = file.file.tell()
-    file.file.seek(0)
+    data = await file.read()
+    size = len(data)
     if size > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="File too large")
+
+    digest = hashlib.sha256(data).hexdigest()
+    if digest in HASH_TO_JOB:
+        return {"job_id": HASH_TO_JOB[digest]}
 
     job_id = str(uuid4())
     suffix = Path(file.filename).suffix
     dest = UPLOAD_DIR / f"{job_id}{suffix}"
-    dest.write_bytes(await file.read())
+    dest.write_bytes(data)
 
     try:
         elements = parse_document(dest)
@@ -81,6 +91,8 @@ async def ingest(file: UploadFile = File(...)) -> dict[str, Any]:
     chunks = chunk_text(full_text)
     metadatas = [{"file_id": job_id} for _ in chunks]
     store.add_texts(chunks, metadatas)
+    HASH_TO_JOB[digest] = job_id
+    HASH_MAP_PATH.write_text(json.dumps(HASH_TO_JOB))
 
     return {"job_id": job_id}
 
